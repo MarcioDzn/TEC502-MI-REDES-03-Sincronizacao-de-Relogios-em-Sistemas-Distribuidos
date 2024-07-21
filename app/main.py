@@ -33,6 +33,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
 app = Flask(__name__)
+CORS(app)
 
 token = Token(Status.ACTIVE)
 
