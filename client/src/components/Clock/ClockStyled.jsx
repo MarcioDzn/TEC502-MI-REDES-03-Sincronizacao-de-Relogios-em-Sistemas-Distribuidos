@@ -13,6 +13,23 @@ export const ClockContainer = styled.div`
     color: #F1F1F4;
 
     border: ${props => props.is_leader ? "10px solid orange" : "none"};
+
+    input {
+        border: none;
+        outline: none;
+        background-color: #797979;
+        color: white;
+        width: 25px;
+        font-size: 1.05rem;
+    }
+
+    button {
+        outline: none;
+        border: 1px solid white;
+        background-color: #25252D;
+        color: white;
+        cursor: pointer;
+    }
 `
 
 export const ClockNode = styled.span`
@@ -33,7 +50,10 @@ export const ClockMinute = styled.span``
 export const ClockSecond = styled.span``
 
 export const Drift = styled.span`
-
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
 `
 
 export const EditClock = styled.span`

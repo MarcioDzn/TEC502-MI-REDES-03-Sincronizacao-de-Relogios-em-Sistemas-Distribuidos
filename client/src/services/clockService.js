@@ -17,3 +17,14 @@ export const getClock = async (ip) => {
     };
   }
 };
+
+export const setDrift = async (ip, drift) => {
+  const body = {
+    drift: drift
+  }
+  const response = await axios.patch(`http://${ip}${BASE_ENDPOINT}`, body, {
+    timeout: 2000 // Tempo máximo em milissegundos (ex: 2000 ms = 2 segundos)
+  });
+  
+  return response
+};
