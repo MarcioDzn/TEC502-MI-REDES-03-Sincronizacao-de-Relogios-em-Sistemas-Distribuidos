@@ -1,11 +1,14 @@
 import { secondsToTime } from "../../utils/secondsToTime";
-import { ClockContainer, ClockHour, ClockMinute, ClockSecond, ClockTimer, Drift, ClockNode } from "./ClockStyled";
+import { ClockContainer, EditClock, ClockHour, ClockMinute, ClockSecond, ClockTimer, Drift, ClockNode } from "./ClockStyled";
+import {useState} from "react"
 
 
 export function Clock({error, node, time, leader, drift}) {
+    const [isChangingDrift, setIsChangingDift] = useState(false)
     const { hours, minutes, seconds: secs } = secondsToTime(time)
+    console.log(node + leader)
     return (
-        <ClockContainer>
+        <ClockContainer is_leader={leader}>
             <ClockNode>{node}</ClockNode>
             {
                 error ? 
@@ -21,8 +24,19 @@ export function Clock({error, node, time, leader, drift}) {
                     <ClockSecond>{secs}</ClockSecond>
                 </ClockTimer>
             }
-            {
-                !error ? <Drift>Drift: {drift}</Drift> : <Drift>Drift: Nenhum</Drift>
+            {   
+                
+            !error ? !isChangingDrift ? <Drift onClick={() => {isChangingDrift ? setIsChangingDift(false) : setIsChangingDift(true)}}>Drift: {drift}</Drift> : 
+                <form onSubmit={() => {
+
+                }}>
+                    <input type="text"/>
+                    <button type="submit">a</button>
+                </form>  : 
+                <Drift>Drift: Nenhum</Drift>
+                
+                
+    
             }
 
         </ClockContainer>

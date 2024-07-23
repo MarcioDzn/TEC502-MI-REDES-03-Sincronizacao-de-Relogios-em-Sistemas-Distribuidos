@@ -11,6 +11,8 @@ export const ClockContainer = styled.div`
     margin: 5px;
     background-color: #25252D;
     color: #F1F1F4;
+
+    border: ${props => props.is_leader ? "10px solid orange" : "none"};
 `
 
 export const ClockNode = styled.span`
@@ -32,4 +34,11 @@ export const ClockSecond = styled.span``
 
 export const Drift = styled.span`
 
+`
+
+export const EditClock = styled.span`
+    border-radius: 0 10px 10px 0;
+    padding: 0px 10px; 
+
+    cursor: pointer;
 `

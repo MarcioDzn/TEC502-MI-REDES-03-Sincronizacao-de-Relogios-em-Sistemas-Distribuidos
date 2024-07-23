@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { getClock } from './services/clockService';
 import Loading from './components/Loading/Loading';
 
-const nodeIPs = ["127.0.0.1:8088", "172.16.103.9:8088", "172.16.103.8:8088", "172.16.103.7:8088"];
+const nodeIPs = ["172.16.103.9:8088", "172.16.103.8:8088", "172.16.103.11:8088"];
 
 function App() {
   const [clockData, setClockData] = useState({});
@@ -47,6 +47,7 @@ function App() {
               node={clockData[ip]?.node}
               time={clockData[ip]?.time}
               drift={clockData[ip]?.drift}
+              leader={clockData[ip]?.leader}
               ip={ip}
             />
           </>

@@ -35,8 +35,6 @@ logger.setLevel(logging.DEBUG)
 app = Flask(__name__)
 CORS(app)
 
-token = Token(Status.ACTIVE)
-
 global leader, drift
 leader = Leader()
 
@@ -44,18 +42,26 @@ currentTime = 0
 
 alreadyApplied = False
 
+sync_lock = threading.Lock()
+
 SEND_TOKEN_TIMEOUT = 0.5
 VERIFY_LEADER_TIMEOUT = 0.5
 SET_LEADER_TIMEOUT = 0.5
-WAIT_SEND_TOKEN_TIME = 0.2
-WAIT_SYNC = 3
+WAIT_SEND_TOKEN_TIME = 0.3
+WAIT_SYNC = 5
 SYNC_TIMEOUT = 0.5
 ASK_FOR_TOKEN_TIMEOUT = 0.5
 CHANGE_TOKEN_ID_TIMEOUT = 0.5
-drift = 0.9
+drift = 0.7
 
 CURRENT_NODE = 0
-NODE_LIST = ["172.16.103.9:8088", "172.16.103.8:8088", "172.16.103.7:8088"]
+
+if (CURRENT_NODE == 0):
+    token = Token(Status.ACTIVE)
+else:
+    token = Token(Status.INACTIVE)
+
+NODE_LIST = ["172.16.103.9:8088", "172.16.103.8:8088", "172.16.103.11:8088"]
 
 
 def inactiveTokenTimer(checkIntervalMs=1, timeoutSeconds=((WAIT_SEND_TOKEN_TIME + SEND_TOKEN_TIMEOUT)*len(NODE_LIST))*3):
@@ -67,9 +73,11 @@ def inactiveTokenTimer(checkIntervalMs=1, timeoutSeconds=((WAIT_SEND_TOKEN_TIME 
             return
         sleep(checkIntervalMs / 1000.0)  
 
-        response = verify_online(NODE_LIST[CURRENT_NODE].split(":")[0])
+        online = verify_online(NODE_LIST[CURRENT_NODE].split(":")[0])
 
-        if (not response):
+        if (not online):
+            token.leader = None
+            leader.id = None
             logger.warning("COMPUTADOR DESCONECTADO DA REDE")
             return 
 
@@ -115,16 +123,16 @@ def changeTokenId():
 
 
 def wait4Election():
+    global alreadyApplied
+
     while (token.status != Status.ACTIVE):
         pass
 
     token.state = State.ELECTING
-
     global currentTime
     toElectNode(CURRENT_NODE, currentTime, currentTime, [])
 
     # flag pra indicar que já se candidatou
-    global alreadyApplied
     alreadyApplied = True
 
 
@@ -146,6 +154,46 @@ def sync():
                 pass
 
 
+def verifyAlone():
+    while True:
+        isAlone = True
+        for node in NODE_LIST:
+            try:
+                if (node != NODE_LIST[CURRENT_NODE]):
+                    requests.get(f"http://{node}/v1/api", timeout=SYNC_TIMEOUT)
+                    isAlone = False
+            except:
+                pass
+        
+        online = verify_online(NODE_LIST[CURRENT_NODE].split(":")[0])
+
+        if (isAlone and online):
+            while (token.status != Status.ACTIVE):
+                pass
+            
+            # se o nó estiver sozinho ele se elege como lider
+            token.state = State.WALKING
+            token.clearNodeClocks()
+            token.leader = CURRENT_NODE
+            leader.id = CURRENT_NODE
+
+        if (isAlone and not online):
+            token.state = State.WALKING
+            token.clearNodeClocks()
+            token.leader = None
+            leader.id = None
+
+            isAlone = True
+            while (isAlone):
+                for node in NODE_LIST:
+                    try:
+                        if (node != NODE_LIST[CURRENT_NODE]):
+                            requests.get(f"http://{node}/v1/api", timeout=SYNC_TIMEOUT)
+                            isAlone = False
+                    except:
+                        pass
+
+
 def incrementTime():
     while True:
         global drift
@@ -153,7 +201,9 @@ def incrementTime():
 
         global currentTime
         logger.info("TEMPO ATUAL: {}s | LIDER: {}".format(currentTime, leader.id))
-        currentTime += 1
+
+        with sync_lock:
+            currentTime += 1
 
 
 def sendToken():
@@ -216,7 +266,7 @@ def toElectNode(nodeId, currentTimeNode, tokenTime, currentClocksList):
                         response = requests.post(f"http://{node}/v1/api/leader", json={"leader_id": leader.id}, timeout=SET_LEADER_TIMEOUT)
                 except Exception as e:
                     pass
-
+            
             return
 
     electionInfo = {"nodeId": nodeId, "time": currentTimeNode}
@@ -228,36 +278,77 @@ def toElectNode(nodeId, currentTimeNode, tokenTime, currentClocksList):
 
 
 def verifyLeaderOnline():
-    global token
-    global leader
+    global alreadyApplied
 
     while True:
-        if (token.status != Status.ACTIVE or token.state != State.WALKING):
-            global alreadyApplied
-            if (alreadyApplied):
-                sendToken()
-                alreadyApplied = False
-
-            continue
-
         try:
+            if (token.status != Status.ACTIVE or token.state != State.WALKING):
+                if (token.status == Status.ACTIVE and token.state == State.ELECTING):
+                    if (token.state == State.ELECTING and alreadyApplied):
+                        alreadyApplied = False
+                        inciteError = 1/0
+
+                continue
+
             if (NODE_LIST[leader.id] != NODE_LIST[CURRENT_NODE]):
                 requests.get(f"http://{NODE_LIST[leader.id]}/v1/api/leader", timeout=VERIFY_LEADER_TIMEOUT)
 
-        # lider está inativo | começa a eleição
-        except:
-            logger.info('ELEIÇÃO INICIADA')
-            token.state = State.ELECTING
+        except ZeroDivisionError:
+            pass
 
-            global currentTime
-            toElectNode(CURRENT_NODE, currentTime, currentTime, [])
+        except:
+            online = verify_online(NODE_LIST[CURRENT_NODE].split(":")[0])
+
+            if (online):
+                logger.warning('ELEIÇÃO INICIADA')
+                token.state = State.ELECTING
+
+                global currentTime
+                toElectNode(CURRENT_NODE, currentTime, currentTime, [])
+                alreadyApplied = True
+
         finally:
             sendToken()
 
 
 
+# def verifyLeaderOnline():
+#     global token
+#     global leader
+
+#     while (verifyAlone()):
+#         logger.warning("ESTÁ OFFLINE")
+#         pass
+#     logger.info("ESTÁ ONLINE")
+
+#     while True:
+#         if (token.status != Status.ACTIVE or token.state != State.WALKING):
+#             global alreadyApplied
+#             if (alreadyApplied):
+#                 sendToken()
+#                 alreadyApplied = False
+
+#             continue
+
+#         try:
+#             if (NODE_LIST[leader.id] != NODE_LIST[CURRENT_NODE]):
+#                 requests.get(f"http://{NODE_LIST[leader.id]}/v1/api/leader", timeout=VERIFY_LEADER_TIMEOUT)
+
+#         # lider está inativo | começa a eleição
+#         except:
+#             logger.info('ELEIÇÃO INICIADA')
+#             token.state = State.ELECTING
+
+#             global currentTime
+#             toElectNode(CURRENT_NODE, currentTime, currentTime, [])
+#         finally:
+#             sendToken()
+
+
+
 @app.route("/v1/api/token", methods=["POST"])
 def receiveToken():
+    global alreadyApplied
     global token
     global leader
 
@@ -292,7 +383,6 @@ def receiveToken():
         toElectNode(CURRENT_NODE, currentTime, nodeClocks[0]["time"], nodeClocks)
 
     # flag pra indicar que já se candidatou
-    global alreadyApplied
     alreadyApplied = True
 
     return jsonify({"message": "Token recebido com sucesso"}), 200
@@ -335,21 +425,21 @@ def isLeader():
 
 @app.route("/v1/api/synchronization", methods=["POST"])
 def syncTime():
-    data = request.get_json()
+    with sync_lock:
+        data = request.get_json()
 
-    time = data["time"]
+        time = data["time"]
 
-    global currentTime
+        global currentTime
 
+        if (time < currentTime):
+            threading.Thread(target=wait4Election).start()
+            return jsonify({"message": "Não é possível voltar no tempo!"}), 406
 
-    if (time < currentTime):
-        threading.Thread(target=wait4Election).start()
-        return jsonify({"message": "Não é possível voltar no tempo!"}), 406
+        currentTime = time
+        logger.info('SINCRONIZADO')
 
-    currentTime = time
-    logger.info('SINCRONIZADO')
-
-    return jsonify({"message": "Tempo sincronizado!"}), 200
+        return jsonify({"message": "Tempo sincronizado!"}), 200
 
 
 @app.route("/v1/api", methods=["GET"])
@@ -378,7 +468,8 @@ def main():
 
 
 if __name__ == "__main__":
-    threading.Thread(target=verifyLeaderOnline).start()
     threading.Thread(target=incrementTime).start()
+    threading.Thread(target=verifyLeaderOnline).start()
     threading.Thread(target=sync).start()
+    threading.Thread(target=verifyAlone).start()
     main()
