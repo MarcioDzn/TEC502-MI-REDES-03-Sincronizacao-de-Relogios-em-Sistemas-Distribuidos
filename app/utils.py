@@ -8,3 +8,12 @@ def verify_online(ip):
         return True
     else:
         return False
+
+# import socket
+
+# def verify_online(ip):
+#     try:
+#         socket.create_connection((ip, 80), timeout=1)
+#         return True
+#     except OSError:
+#         return False

@@ -1,6 +1,6 @@
 import requests, threading
 
-URLS = ["172.16.103.9:8088", "172.16.103.8:8088", "172.16.103.7:8088"]
+URLS = ["172.16.103.9:8088", "172.16.103.8:8088", "172.16.103.11:8088"]
 
 def changeDrift():
     while True:
@@ -9,7 +9,13 @@ def changeDrift():
 
         id = int(id)
         drift = float(drift)
-        print(type(drift))
+
+        if id >= len(URLS) or id < 0 or drift < 0:
+            print("Entrada inválida")
+            continue
+
+
+        print("VALOR ALTERADO")
         url = URLS[id]
 
         try:
